@@ -1,2 +1,2 @@
 # watcher
-# will arrancge your life
+# Will arrange your life
