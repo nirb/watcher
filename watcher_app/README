@@ -1,0 +1,2 @@
+runnin local dynamodb
+docker run --hostname=16e06fa144f1 --user=dynamodblocal --mac-address=02:42:ac:11:00:02 --env=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin --network=bridge --workdir=/home/dynamodblocal -p 8000:8000 --restart=no --label='aws.java.sdk.version=2.5.2' --runtime=runc -d amazon/dynamodb-local
