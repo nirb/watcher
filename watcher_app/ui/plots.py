@@ -27,7 +27,7 @@ class Plot:
     def clean_headers(self, headers):
         if not get_debug_mode():
             remove_list = [COL_ID, COL_PARENT_ID, COL_COMMITMENT,
-                           COL_CURRENCY, COL_TYPE, COL_ACTIVE]
+                           COL_CURRENCY, COL_ACTIVE]
 
             for remove in remove_list:
                 if remove in headers:
@@ -45,11 +45,12 @@ class Plot:
         print_debug(json.dumps(headers, indent=2, cls=DecimalEncoder))
         return headers
 
-    def show_table(self, rows, value_postfix="", sort_headers=True):
+    def show_table(self, rows, value_postfix="", sort_headers=True, headers=None):
         print_debug(
             f"show_table {json.dumps(rows,indent=2,cls=DecimalEncoder)}")
         if len(rows) > 0:
-            headers = self.build_headers(rows)
+            if headers is None:
+                headers = self.build_headers(rows)
             data = []
             for r in rows:
                 row = ["" for i in headers]

@@ -16,6 +16,17 @@ def calculate_investment_profit(invested, currrent_value):
     return currrent_value - invested
 
 
+def months_between_dates(date1, date2):
+    if type(date1) == type("nir"):  # if its in str
+        date1 = datetime.strptime(date1, DATE_FORMAT)
+        date2 = datetime.strptime(date2, DATE_FORMAT)
+
+    if date1 > date2:
+        date1, date2 = date2, date1
+
+    return (date2.year - date1.year) * 12 + (date2.month - date1.month)
+
+
 def calculate_investment_info(events):
     """
     Calculate key financial information including YTD, ITD, IRR, and XIRR from a list of investment events.
@@ -125,17 +136,18 @@ def calculate_investment_info(events):
         COL_INVESTED: total_invested,
         COL_COMMITMENT: total_commitment,
         COL_UNFUNDED: total_invested - total_commitment,
-        "Distribution_ITD": total_distributed,
-        "Distribution_YTD": ytd_distributed,
+        COL_DIST_ITD: total_distributed,
+        COL_DIST_YTD: ytd_distributed,
         COL_VALUE: current_value,
-        "Net Gain or Loss": net_gain_or_loss,
         ROI: to_percent(roi),
         COL_PROFIT_YTD: ytd_net_gain_or_loss,
-        "YTD%": to_percent(ytd_percentage),
-        "ITD": itd_net_gain_or_loss,
-        "ITD%": to_percent(itd_percentage),
-        "IRR": to_percent(irr),
-        "XIRR": to_percent(xirr)
+        COL_PROFIT_ITD: itd_net_gain_or_loss,
+        NET_GAIN: net_gain_or_loss,
+        YTDP: to_percent(ytd_percentage),
+        ITDP: to_percent(itd_percentage),
+        IRR: to_percent(irr),
+        XIRR: to_percent(xirr),
+        MONTHS: months_between_dates(events[0][COL_DATE], events[-1][COL_DATE])
     }
 
     # print(json.dumps(result, indent=4))

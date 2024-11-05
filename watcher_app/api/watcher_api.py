@@ -91,18 +91,25 @@ class WatcherApi:
                     indent=4, cls=DecimalEncoder))
 
         self.show_watcher_summary()
-        print("Watchers:")
         for w in watchers:
             watcher_info = self.get_watcher_info(w)
             if watcher_info:
                 w[COL_VALUE] = watcher_info[COL_FINANCE][COL_VALUE]
                 w[COL_PROFIT_ITD] = watcher_info[COL_FINANCE][COL_PROFIT_ITD]
+                w[COL_PROFIT_YTD] = watcher_info[COL_FINANCE][COL_PROFIT_YTD]
+                w[COL_INVESTED] = watcher_info[COL_FINANCE][COL_INVESTED]
+                w[COL_DIST_YTD] = watcher_info[COL_FINANCE][COL_DIST_YTD]
+                w[COL_DIST_ITD] = watcher_info[COL_FINANCE][COL_DIST_ITD]
+                w[ROI] = watcher_info[COL_FINANCE][ROI]
                 w[COL_EVENTS_COUNT] = len(watcher_info[COL_EVENTS_COUNT])
+                w[XIRR] = watcher_info[COL_FINANCE][XIRR]
                 w[COL_COMMITMENT] = watcher_info[COL_FINANCE][COL_COMMITMENT]
                 w[COL_UNFUNDED] = watcher_info[COL_FINANCE][COL_UNFUNDED]
-                w[COL_INVESTED] = watcher_info[COL_FINANCE][COL_INVESTED]
-                w[ROI] = watcher_info[COL_FINANCE][ROI]
-        Plot().show_table(self.get_watchers())
+                w[MONTHS] = watcher_info[COL_FINANCE][MONTHS]
+        Plot().show_table(self.get_watchers(),
+                          headers=[COL_NAME, COL_VALUE, COL_INVESTED, COL_DIST_ITD, ROI, MONTHS])
+        Plot().show_table(self.get_watchers(),
+                          headers=[COL_NAME, COL_PROFIT_ITD, COL_PROFIT_YTD, COL_DIST_YTD, COL_UNFUNDED, XIRR])
 
     def remove_watcher_by_name(self, name):
         print_debug(f"remove_watcher_by_name {name=}")

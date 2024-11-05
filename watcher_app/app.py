@@ -279,6 +279,21 @@ def get_watcher_name_from_json_ai(ai_json):
     return RET_FAILED
 
 
+def get_event_type_from_doc(doc_type):
+    options = [("statement", STATEMENT_EVENT_TYPE),
+               ("distribution", DISTRIBUTION_EVENT_TYPE),
+               ("wire", WIRE_RECEIPT_EVENT_TYPE),
+               ("commitment", COMMITMENT_EVENT_TYPE)]
+
+    print("get_event_type_from_doc", doc_type, options)
+
+    for option in options:
+        if option[0] in doc_type:
+            return option[1]
+    print("can't find event type from doc_type", doc_type)
+    exit(0)
+
+
 def ai_menu():
     # watcher_name = select_watcher()
     folder = input(f"Enter docs folder (enter {INVESTMENTS_DOC_DIR}): ")
@@ -292,13 +307,20 @@ def ai_menu():
         return
 
     # print(files_in_directory)
+    docs_types = "(statement or distribution or wire or commitment)"
     selected_doc = select_from_list("Select a doc", sorted(files_in_directory))
-    pre_text = f"return a json with the following keys \
-                  (fund_name, title, curency, current_value (without commas), report_date,\
-                      doc_type, initial_investment, currency) \
-                      from the following text, in most cases 'fund_name' is in the first row of the title"
+    distribution_ai = "return a json with the following keys \
+                  (fund_name, title, current_value (the distribution, without commas), report_date,\
+                      doc_type, currency)"
+    statement_ai = "return a json with the following keys \
+                  (fund_name, title, current_value (without commas), report_date,\
+                      doc_type, initial_investment, currency)"
+    general_ai_info = f"in most cases 'fund_name' is in the first row of the title, 'doc_type' can be on of {docs_types} and in most cases is in the title"
+    ai_text = f"if it is a 'statement' {statement_ai},\
+        if it is a 'distribution' {distribution_ai}, \
+            {general_ai_info}"
     file_to_analyze = os.path.join(folder, selected_doc)
-    result = analyze_doc(pre_text, file_to_analyze)
+    result = analyze_doc(ai_text, file_to_analyze)
     json_index_start = result.find("```json") + len("```json")
     json_index_end = result.find("```", json_index_start+5)
     try:
@@ -318,18 +340,23 @@ def ai_menu():
     watcher = appApi.get_watcher_by_name(watcher_name)
     if watcher == RET_FAILED:
         print(f"Watcher with name '{watcher_name}' not found.")
-        if select_from_list(
-                f"Do you want to create new watcher with the name '{watcher_name}'",
-                [YES, NO]) == YES:
+        selected = select_from_list(
+            f"Do you want to create new watcher with the name '{watcher_name}'",
+            [YES, NO, "Use exsiting"])
+        if selected == YES:
             add_watcher_menu(watcher_name)
             watcher = appApi.get_watcher_by_name(watcher_name)
             if watcher == RET_FAILED:
                 return
+        elif selected == "Use exsiting":
+            watcher_name = select_watcher()
+            watcher = appApi.get_watcher_by_name(watcher_name)
         else:
             return
 
     date = date_str_to_datetime(ai_json["report_date"])
-    type = STATEMENT_EVENT_TYPE  # TODO fix it
+    type = get_event_type_from_doc(ai_json["doc_type"].lower())
+
     value = int(ai_json["current_value"])
 
     print(
