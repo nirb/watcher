@@ -1,19 +1,21 @@
+import sys
 import os
+import json
 from simple_term_menu import TerminalMenu
 from datetime import datetime
 from dotenv import load_dotenv
-import json
+
 from api.api import AppApi
 from helpers.defs import *
 from helpers.debug import get_debug_mode, toggle_debug_mode, print_debug
-from helpers.helpers import currency_to_symbol_or_type
+from helpers.helpers import currency_to_symbol_or_type, DecimalEncoder
+from helpers.investment_calc import calculate_investment_profit
 from ui.plots import Plot
 from ai.ai import analyze_doc
 from test.test import run_tests
-import sys
-test_mode = False
+
 load_dotenv()
-appApi = AppApi(local_db=True, test_mode=False)
+appApi = AppApi(local_db=True)
 
 
 def select_from_list(message, input_list, current_selection=""):
@@ -232,8 +234,24 @@ def watcher_info():
     watcher = appApi.get_watcher_by_name(select_watcher())
     if watcher != -1:
         watcher_info = appApi.get_watcher_info(watcher)
-        Plot().show_plot(watcher_info["events"], title=watcher[COL_NAME],
-                         currency=currency_to_symbol_or_type(watcher[COL_CURRENCY]))
+        events = list(filter(
+            lambda item: item[COL_TYPE] == STATEMENT_EVENT_TYPE, watcher_info["events"]))
+        distributions = list(filter(
+            lambda item: item[COL_TYPE] == DISTRIBUTION_EVENT_TYPE, watcher_info["events"]))
+        currency = currency_to_symbol_or_type(watcher[COL_CURRENCY])
+        plots_data = [{"data": events,
+                       "title": STATEMENT_EVENT_TYPE,
+                       "currency": currency}]
+        if len(distributions) > 0:
+            plots_data.append(
+                {"data": distributions,
+                 "title": DISTRIBUTION_EVENT_TYPE,
+                 "currency": currency})
+            Plot().show_plots(plots_data, window_title=watcher[COL_NAME])
+        else:
+            Plot().show_plot(plots_data[0]["data"],
+                             plot_title=STATEMENT_EVENT_TYPE,
+                             currency=currency, window_title=watcher[COL_NAME])
 
 
 def toggle_debug():
@@ -400,38 +418,151 @@ def show_sub_menu(menu_entries, add_back=True):
     menu_entries[choice][1]()
 
 
+def show_watcher_summary():
+    watchers = appApi.get_watchers()
+    if len(watchers) > 0:
+        print("Watchers summary")
+        rows = []
+        for currency in CURRENCY_TYPES:
+            currency_sum = 0
+            invested = 0
+            ytd = 0
+            commited = 0
+            for w in watchers:
+                if w[COL_CURRENCY] == currency:
+                    watcher_info = appApi.get_watcher_info(w)
+                    print_debug(
+                        f"get_watcher_info {json.dumps(watcher_info,indent=4,cls=DecimalEncoder)}")
+                    if watcher_info is not None:
+                        currency_sum += watcher_info[COL_FINANCE][COL_VALUE]
+                        invested += watcher_info[COL_FINANCE][COL_INVESTED]
+                        ytd += watcher_info[COL_FINANCE][COL_PROFIT_YTD]
+                        commited += watcher_info[COL_FINANCE][COL_COMMITMENT]
+
+            row = {COL_CURRENCY: currency,
+                   COL_VALUE: currency_sum,
+                   COL_INVESTED: invested,
+                   COL_PROFIT_ITD: calculate_investment_profit(invested, currency_sum),
+                   COL_PROFIT_YTD: ytd,
+                   COL_COMMITMENT: commited,
+                   COL_UNFUNDED: invested-commited}
+
+            rows.append(row)
+        print_debug(json.dumps(rows, indent=2, cls=DecimalEncoder))
+        Plot().show_table(rows, sort_headers=False)
+
+
+def show_watchers():
+    watchers = appApi.get_watchers()
+    if len(watchers) == 0:
+        print("No Watchers found, create the first one")
+        return
+
+    print_debug(json.dumps(watchers, indent=4, cls=DecimalEncoder))
+
+    show_watcher_summary()
+    for w in watchers:
+        watcher_info = appApi.get_watcher_info(w)
+        if watcher_info:
+            w[COL_VALUE] = watcher_info[COL_FINANCE][COL_VALUE]
+            w[COL_PROFIT_ITD] = watcher_info[COL_FINANCE][COL_PROFIT_ITD]
+            w[COL_PROFIT_YTD] = watcher_info[COL_FINANCE][COL_PROFIT_YTD]
+            w[COL_INVESTED] = watcher_info[COL_FINANCE][COL_INVESTED]
+            w[COL_DIST_YTD] = watcher_info[COL_FINANCE][COL_DIST_YTD]
+            w[COL_DIST_ITD] = watcher_info[COL_FINANCE][COL_DIST_ITD]
+            w[ROI] = watcher_info[COL_FINANCE][ROI]
+            w[COL_EVENTS_COUNT] = len(watcher_info[COL_EVENTS_COUNT])
+            w[XIRR] = watcher_info[COL_FINANCE][XIRR]
+            w[COL_COMMITMENT] = watcher_info[COL_FINANCE][COL_COMMITMENT]
+            w[COL_UNFUNDED] = watcher_info[COL_FINANCE][COL_UNFUNDED]
+            w[MONTHS] = watcher_info[COL_FINANCE][MONTHS]
+    headers = [COL_NAME, COL_VALUE,
+               COL_INVESTED, COL_DIST_ITD, ROI, MONTHS]
+    Plot().show_table(watchers, headers=headers)
+    headers = [COL_NAME, COL_PROFIT_ITD, COL_PROFIT_YTD,
+               COL_DIST_YTD, COL_UNFUNDED, XIRR]
+    Plot().show_table(watchers, headers=headers)
+
+
 def watchers_menu():
-    menu_entries = [
-        ["Show Watchers", appApi.show_watchers],
+    show_sub_menu([
+        ["Show Watchers", show_watchers],
         ["Add Watcher", add_watcher_menu],
         ["Show Watcher Info", watcher_info],
         ["Update Watcher", update_watcher_menu],
         ["Remove Watcher", remove_watcher_menu]
-    ]
-    show_sub_menu(menu_entries)
+    ])
 
 
 def events_menu():
-    menu_entries = [
+    show_sub_menu([
         ["Show Events", show_events_menu],
         ["Add Event", add_event_menu],
         ["Update Event", update_event_menu],
         ["Remove Event", remove_event_menu],
         ["Remove Events", remove_events_menu],
-    ]
-    show_sub_menu(menu_entries)
+    ])
+
+
+def get_string_input(question):
+    selected_input = input(question)
+    if len(selected_input) < 3:
+        print("input is too short")
+        back_to_main_menu()
+    return selected_input
+
+
+def add_advisor():
+    advisor_name = get_string_input("Advisor name: ")
+    advisor_phone_number = get_string_input("Advisor phone: ")
+    advisor_mail = get_string_input("Advisor mail: ")
+
+    if appApi.add_advisor(advisor_name, advisor_phone_number, advisor_mail) == RET_OK:
+        print(f"Advisor '{advisor_name}' added sucsessfuly")
+    else:
+        print("Faild to add advisor")
+
+
+def remove_advisor():
+    advisors = appApi.get_advisors()
+    if len(advisors) == 0:
+        print("No advisors found")
+        return
+    advisor_name = select_from_list("Select Advisor",
+                                    list(map(lambda item: item[COL_ID], advisors)))
+    if appApi.remove_advisor(advisor_name) == RET_OK:
+        print(f"Advisor '{advisor_name}' removed sucsessfuly")
+    else:
+        print("Faild to remove advisor")
+
+
+def show_advisors():
+    advisors = appApi.get_advisors()
+    if len(advisors) == 0:
+        print("No advisors found")
+        return
+    Plot().show_table(advisors, headers=[COL_ID, COL_MAIL, COL_PHONE])
+
+
+def settings_menu():
+    debug_menu = "Disable Debug" if get_debug_mode() else "Enable Debug"
+    show_sub_menu([[debug_menu, toggle_debug],
+                   ["Add Advisor", add_advisor],
+                   ["Remove Advisor", remove_advisor],
+                   ["Show Advisors", show_advisors],
+                   ["Run Tests", run_tests],
+                   ])
 
 
 def main_menu():
-    debug_menu = "Disable Debug" if get_debug_mode() else "Enable Debug"
-    if test_mode:
-        print("!!!!!! RUNNING IS TEST MODE !!!!")
+    if get_debug_mode():
+        print("!!!!!! RUNNING IN DEBUG MODE !!!!")
+
     menu_entries = [
         ["AI", ai_menu],
         ["Watchers", watchers_menu],
         ["Events", events_menu],
-        [debug_menu, toggle_debug],
-        ["run_tests", run_tests],
+        ["Settings", settings_menu],
         ["Exit", exit],
     ]
     show_sub_menu(menu_entries, add_back=False)

@@ -1,11 +1,8 @@
 from helpers.defs import *
 from helpers.debug import print_debug
-from helpers.investment_calc import calculate_investment_info, calculate_investment_profit
-from helpers.helpers import int_to_str, generate_id, capitalize_list, DecimalEncoder
-from tabulate import tabulate
-from ui.plots import Plot
+from helpers.investment_calc import calculate_investment_info
+from helpers.helpers import generate_id
 from helpers.tables import get_row_by_name, get_row_index_by_col
-import json
 
 
 class WatcherApi:
@@ -47,69 +44,6 @@ class WatcherApi:
 
         return {COL_EVENTS: watcher_events,
                 COL_FINANCE: calculate_investment_info(watcher_events)}
-
-    def show_watcher_summary(self):
-        watchers = self.get_watchers()
-        if len(watchers) > 0:
-            print("Watchers summary")
-            rows = []
-            for currency in CURRENCY_TYPES:
-                currency_sum = 0
-                invested = 0
-                ytd = 0
-                commited = 0
-                for w in watchers:
-                    if w[COL_CURRENCY] == currency:
-                        watcher_info = self.get_watcher_info(w)
-                        print_debug(
-                            f"get_watcher_info {json.dumps(watcher_info,indent=4,cls=DecimalEncoder)}")
-                        if watcher_info is not None:
-                            currency_sum += watcher_info[COL_FINANCE][COL_VALUE]
-                            invested += watcher_info[COL_FINANCE][COL_INVESTED]
-                            ytd += watcher_info[COL_FINANCE][COL_PROFIT_YTD]
-                            commited += watcher_info[COL_FINANCE][COL_COMMITMENT]
-
-                row = {COL_CURRENCY: currency,
-                       COL_VALUE: currency_sum,
-                       COL_INVESTED: invested,
-                       COL_PROFIT_ITD: calculate_investment_profit(invested, currency_sum),
-                       COL_PROFIT_YTD: ytd,
-                       COL_COMMITMENT: commited,
-                       COL_UNFUNDED: invested-commited}
-
-                rows.append(row)
-            print_debug(json.dumps(rows, indent=2, cls=DecimalEncoder))
-            Plot().show_table(rows, sort_headers=False)
-
-    def show_watchers(self):
-        watchers = self.get_watchers()
-        if len(watchers) == 0:
-            print("No Watchers found, create the first one")
-            return
-
-        print_debug(json.dumps(self.get_watchers(),
-                    indent=4, cls=DecimalEncoder))
-
-        self.show_watcher_summary()
-        for w in watchers:
-            watcher_info = self.get_watcher_info(w)
-            if watcher_info:
-                w[COL_VALUE] = watcher_info[COL_FINANCE][COL_VALUE]
-                w[COL_PROFIT_ITD] = watcher_info[COL_FINANCE][COL_PROFIT_ITD]
-                w[COL_PROFIT_YTD] = watcher_info[COL_FINANCE][COL_PROFIT_YTD]
-                w[COL_INVESTED] = watcher_info[COL_FINANCE][COL_INVESTED]
-                w[COL_DIST_YTD] = watcher_info[COL_FINANCE][COL_DIST_YTD]
-                w[COL_DIST_ITD] = watcher_info[COL_FINANCE][COL_DIST_ITD]
-                w[ROI] = watcher_info[COL_FINANCE][ROI]
-                w[COL_EVENTS_COUNT] = len(watcher_info[COL_EVENTS_COUNT])
-                w[XIRR] = watcher_info[COL_FINANCE][XIRR]
-                w[COL_COMMITMENT] = watcher_info[COL_FINANCE][COL_COMMITMENT]
-                w[COL_UNFUNDED] = watcher_info[COL_FINANCE][COL_UNFUNDED]
-                w[MONTHS] = watcher_info[COL_FINANCE][MONTHS]
-        Plot().show_table(self.get_watchers(),
-                          headers=[COL_NAME, COL_VALUE, COL_INVESTED, COL_DIST_ITD, ROI, MONTHS])
-        Plot().show_table(self.get_watchers(),
-                          headers=[COL_NAME, COL_PROFIT_ITD, COL_PROFIT_YTD, COL_DIST_YTD, COL_UNFUNDED, XIRR])
 
     def remove_watcher_by_name(self, name):
         print_debug(f"remove_watcher_by_name {name=}")

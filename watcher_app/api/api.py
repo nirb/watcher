@@ -16,9 +16,10 @@ class AppApi:
         table_name = WATCHERS_TABLE_NAME_TEST if test_mode else WATCHERS_TABLE_NAME
         self.watcher_api = WatcherApi(
             self.db, self.event_api, table_name=table_name)
+        self.advisors_table_name = ADVISORS_TABLE_NAME_TEST if test_mode else ADVISORS_TABLE_NAME
 
-    def show_watchers(self):
-        return self.watcher_api.show_watchers()
+    def get_watchers(self):
+        return self.watcher_api.get_watchers()
 
     def add_watcher(self, watcher):
         return self.watcher_api.add_watcher(watcher)
@@ -54,3 +55,14 @@ class AppApi:
 
     def remove_all_events(self, watcher):
         return self.event_api.remove_all_events(watcher)
+
+    # advisors
+    def get_advisors(self):
+        return self.db.get_table(self.advisors_table_name)
+
+    def add_advisor(self, advisor_name, phone, mail):
+        return self.db.add_row(self.advisors_table_name,
+                               row={COL_ID: advisor_name, COL_PHONE: phone, COL_MAIL: mail})
+
+    def remove_advisor(self, advisor_name):
+        return self.db.remove_row(self.advisors_table_name, key={COL_ID: advisor_name})

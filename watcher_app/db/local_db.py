@@ -58,7 +58,7 @@ class LocalDb:
             self.db.Table(table_name).delete_item(Key=key)
             return 0
         except Exception as e:
-            print(f"!!! failed to delete row {key=} to {table_name=}.")
+            print(f"!!! failed to delete row {key=} from {table_name=}.")
             print(f"!!! {e=}")
             return -1
 

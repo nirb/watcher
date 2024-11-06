@@ -45,8 +45,12 @@ class EventApi:
         watcher_events = self.get_event_for_watcher(watcher)
         if len(watcher_events) > 0:
             print_debug(f"show_events {watcher_events}")
-            Plot().show_table(
-                watcher_events, value_postfix=watcher[COL_CURRENCY] if COL_CURRENCY in watcher else "")
+            for event_type in EVENT_TYPES:
+                events = list(
+                    filter(lambda event: event[COL_TYPE] == event_type, watcher_events))
+                if len(events) > 0:
+                    Plot().show_table(
+                        events, value_postfix=watcher[COL_CURRENCY] if COL_CURRENCY in watcher else "")
         else:
             print("No events found for this watcher")
 
@@ -88,7 +92,7 @@ class EventApi:
         return RET_FAILED
 
     def remove_event(self, event_id):
-        if self.db.remove_row(self.table_name, key={"id": event_id}) == 0:
+        if self.db.remove_row(self.table_name, key={COL_ID: event_id}) == 0:
             print_debug(f"Event with id {event_id=} removed")
             self.events = []
             return RET_OK

@@ -75,13 +75,14 @@ class Plot:
     def value_formater(self, value, tick_number):
         return f'{value:,.0f}'  # Format large numbers with commas
 
-    def show_plot(self, data, title, currency):
+    def show_plot(self, data, plot_title, currency, ax=None, window_title=""):
+        show_one_plot = True if ax is None else False
         df = pd.DataFrame(data)
         # df["date"] = df["date"].sort()
-        fig, ax = plt.subplots(figsize=(10, 5), layout='constrained')
+        if show_one_plot:
+            fig, ax = plt.subplots(figsize=(10, 5), layout='constrained')
         ax.bar(df["date"], df["value"])
 
-        ax.set(ylabel=currency, title=title)
         ax.grid()
         plt.yticks()
 
@@ -92,7 +93,19 @@ class Plot:
             xticks.append(df["date"][int(number_of_dates/2)])
             xticks.append(df["date"][number_of_dates-1])
 
-        plt.xticks(ticks=xticks)
+        ax.set(ylabel=currency, title=plot_title, xticks=xticks)
         plt.gca().yaxis.set_major_formatter(FuncFormatter(self.value_formater))
         cursor(hover=True)
+        if show_one_plot:
+            fig.canvas.manager.set_window_title(window_title)
+            plt.show()
+
+    def show_plots(self, plots_data, window_title=''):
+        fig, ax = plt.subplots(
+            figsize=(10, 5), layout='constrained', nrows=1, ncols=len(plots_data))
+        for index, plot_data in enumerate(plots_data):
+            self.show_plot(
+                data=plot_data["data"], plot_title=plot_data["title"],
+                currency=plot_data["currency"], ax=ax[index])
+        fig.canvas.manager.set_window_title(window_title)
         plt.show()
