@@ -11,14 +11,16 @@ class EventApi:
         self.db = db
         self.events = []
         self.table_name = table_name
+        self.watcher_api = None
 
     def get_events(self):
         if len(self.events) == 0:
             self.events = self.db.get_table(self.table_name)
-        return list(reversed(sorted(self.events, key=lambda item: item[COL_DATE])))
+        return list(
+            reversed(sorted(self.events, key=lambda item: item[COL_DATE])))
 
     def add_event(self, watcher, date, type, value, description):
-        events = self.get_event_for_watcher(watcher)
+        events = self.watcher_api.get_watcher_events(watcher)
         if any(item[COL_PARENT_ID] == watcher[COL_ID] and
                item[COL_VALUE] == value and
                item[COL_TYPE] == type and
@@ -36,23 +38,6 @@ class EventApi:
         else:
             print("Add event failed")
             return RET_FAILED
-
-    def get_event_for_watcher(self, watcher):
-        return list(
-            filter(lambda item: item[COL_PARENT_ID] == watcher[COL_ID], self.get_events()))
-
-    def show_events(self, watcher):
-        watcher_events = self.get_event_for_watcher(watcher)
-        if len(watcher_events) > 0:
-            print_debug(f"show_events {watcher_events}")
-            for event_type in EVENT_TYPES:
-                events = list(
-                    filter(lambda event: event[COL_TYPE] == event_type, watcher_events))
-                if len(events) > 0:
-                    Plot().show_table(
-                        events, value_postfix=watcher[COL_CURRENCY] if COL_CURRENCY in watcher else "")
-        else:
-            print("No events found for this watcher")
 
     def update_event(self, parent_id, event_id, date, type, value, description):
         payload = {
@@ -100,14 +85,14 @@ class EventApi:
         return RET_FAILED
 
     def remove_all_events(self, watcher):
-        events = self.get_event_for_watcher(watcher)
+        events = self.watcher_api.get_watcher_events(watcher)
         if len(events) == 0:
             print(
                 f"remove_all_events - No events found for watcher '{watcher[COL_NAME]}'")
         print(
             f"removing #{len(events)} events for watcher '{watcher[COL_NAME]}'")
         while True:
-            events = self.get_event_for_watcher(watcher)
+            events = self.watcher_api.get_watcher_events(watcher)
             if len(events) == 0:
                 print_debug(
                     f"remove_all_events - all events removed for watcher '{watcher[COL_NAME]}'")

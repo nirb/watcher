@@ -1,6 +1,6 @@
 import numpy as np
 from helpers.defs import *
-from helpers.helpers import DecimalEncoder, int_to_str
+from helpers.helpers import DecimalEncoder, get_months_list, date_to_month_str
 from datetime import datetime
 from scipy.optimize import newton
 import numpy_financial as npf
@@ -131,6 +131,10 @@ def calculate_investment_info(events):
     except Exception as e:
         xirr = 0
 
+    invested_months = 0
+    if len(events) > 1:
+        invested_months = months_between_dates(
+            events[0][COL_DATE], events[-1][COL_DATE])
     # Prepare the result dictionary
     result = {
         COL_INVESTED: total_invested,
@@ -147,7 +151,7 @@ def calculate_investment_info(events):
         ITDP: to_percent(itd_percentage),
         IRR: to_percent(irr),
         XIRR: to_percent(xirr),
-        MONTHS: months_between_dates(events[0][COL_DATE], events[-1][COL_DATE])
+        MONTHS: invested_months
     }
 
     # print(json.dumps(result, indent=4))
@@ -155,15 +159,31 @@ def calculate_investment_info(events):
     return result
 
 
-# Example usage
-events = [
-    {COL_DATE: "2023-01-01", COL_TYPE: WIRE_RECEIPT_EVENT_TYPE, COL_VALUE: 4000},
-    {COL_DATE: "2023-02-15", COL_TYPE: WIRE_RECEIPT_EVENT_TYPE, COL_VALUE: 1000},
-    {COL_DATE: "2023-05-10", COL_TYPE: DISTRIBUTION_EVENT_TYPE, COL_VALUE: 1000},
-    {COL_DATE: "2023-02-28", COL_TYPE: STATEMENT_EVENT_TYPE, COL_VALUE: 5400},
-    {COL_DATE: "2024-02-28", COL_TYPE: STATEMENT_EVENT_TYPE, COL_VALUE: 5500},
-    {COL_DATE: "2024-02-28", COL_TYPE: DISTRIBUTION_EVENT_TYPE, COL_VALUE: 100},
-    {COL_DATE: "2024-09-30", COL_TYPE: STATEMENT_EVENT_TYPE, COL_VALUE: 6000},
-]
+def generate_year_row():
+    year_row = {}
+    for m in get_months_list():
+        year_row[m] = 0
 
-# calculate_investment_info(events)
+    return year_row
+
+
+def get_events_months(events):
+
+    months = []
+    for year in range(2022, 2025):
+        months += get_months_list(year)
+
+    print(json.dumps(months, indent=2, cls=DecimalEncoder))
+    return
+
+    first_date = event_date = datetime.strptime(
+        events[-1][COL_DATE], DATE_FORMAT)
+    for e in reversed(events):
+        event_date = datetime.strptime(e[COL_DATE], DATE_FORMAT)
+        months[f"{event_date.year}:{event_date.month}"] = int(e[COL_VALUE])
+
+        month = date_to_month_str(event_date)
+        if years[event_date.year][month] == 0:
+            years[event_date.year][month] = e[COL_VALUE]
+        print(e[COL_VALUE], e[COL_DATE], e[COL_TYPE], event_date.month)
+    print(json.dumps(years, indent=2, cls=DecimalEncoder))

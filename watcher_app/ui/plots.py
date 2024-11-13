@@ -50,7 +50,7 @@ class Plot:
             f"show_table {json.dumps(rows,indent=2,cls=DecimalEncoder)}")
         if len(rows) > 0:
             if headers is None:
-                headers = self.build_headers(rows)
+                headers = self.build_headers(rows, sort_headers)
             data = []
             for r in rows:
                 row = ["" for i in headers]
