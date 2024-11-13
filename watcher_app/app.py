@@ -8,14 +8,16 @@ from dotenv import load_dotenv
 from api.api import AppApi
 from helpers.defs import *
 from helpers.debug import get_debug_mode, toggle_debug_mode, print_debug
-from helpers.helpers import currency_to_symbol_or_type, DecimalEncoder
-from helpers.investment_calc import calculate_investment_profit
+from helpers.helpers import currency_to_symbol_or_type, DecimalEncoder, get_months_list, date_to_month_str
+from helpers.investment_calc import calculate_investment_profit, calculate_investment_info
 from ui.plots import Plot
 from ai.ai import analyze_doc
 from test.test import run_tests
+from random import randint
+
 
 load_dotenv()
-appApi = AppApi(local_db=True)
+appApi = AppApi(local_db=False)
 
 
 def select_from_list(message, input_list, current_selection=""):
@@ -25,13 +27,14 @@ def select_from_list(message, input_list, current_selection=""):
     current_text = "" if current_selection == "" else f"(current: {current_selection})"
 
     print(f"{message} {current_text}:", flush=True)
-    input_list.append(BACK_TO_MAIN_MENU)
+    show_list = input_list.copy()
+    show_list.append(BACK_TO_MAIN_MENU)
     show_list = [f"[{index}] {item}" for index, item in enumerate(input_list)]
     menu = TerminalMenu(show_list)
     selected = input_list[menu.show()]
-    print(selected)
     if selected == BACK_TO_MAIN_MENU:
         back_to_main_menu()
+    print(selected)
     return selected
 
 
@@ -72,11 +75,11 @@ def add_event_menu():
         print(f"Watcher {selected_watcher} not dound")
         return
     if watcher[COL_TYPE] in INVESTMENT_WATCHER_TYPES:
-        type = select_event_type(INVESTMENT_EVENT_TYPES)
+        event_type = select_event_type(INVESTMENT_EVENT_TYPES)
         value = int(input("Enter value: "))
     else:
         value = 0
-        type = select_event_type(OTHER_EVENT_TYPES)
+        event_type = select_event_type(OTHER_EVENT_TYPES)
 
     while True:
         date = input("Enter date (YYYY-MM-DD /enter for today): ")
@@ -85,12 +88,12 @@ def add_event_menu():
             break
         else:  # validate input date
             try:
-                date = datetime.strptime(date, DATE_FORMAT)
+                datetime.strptime(date, DATE_FORMAT).date()
                 break
             except:
                 print("Error in date formate")
 
-    description_default = f"{type} event."
+    description_default = f"{event_type} event."
     description = input(
         f"Enter description / enter for '{description_default}':")
 
@@ -98,7 +101,7 @@ def add_event_menu():
         description = description_default
 
     ret = appApi.add_event(
-        watcher=watcher, date=date, type=type,
+        watcher=watcher, date=date, type=event_type,
         value=value, description=description)
     print("Add event succeddded." if ret == RET_OK else "Add event Failed!!!!")
 
@@ -193,6 +196,10 @@ def add_watcher_menu(name=None):
     else:
         watcher[COL_CURRENCY] = "NA"
 
+    advisors = appApi.get_advisors()
+    advisor_name = select_from_list("Select Advisor",
+                                    list(map(lambda item: item[COL_ID], advisors)))
+    watcher[ADVISOR_NAME] = advisor_name
     if appApi.add_watcher(watcher):
         print(f"New Watcher added {name}")
 
@@ -203,13 +210,15 @@ def show_events_menu():
         watcher = appApi.get_watcher_by_name(selected_watcher)
         if watcher:
             print("Events:")
-            appApi.show_events(watcher)
+            show_events(watcher)
         else:
             print(f"Watcher {selected_watcher} not dound")
 
 
 def are_you_sure(message):
-    return select_from_list(message, [NO, NO, YES, NO, NO]) == YES
+    random_list = [NO for i in range(5)]
+    random_list[randint(1, len(random_list)-1)] = YES
+    return select_from_list(message, random_list) == YES
 
 
 def remove_watcher_menu():
@@ -230,16 +239,16 @@ def remove_events_menu():
         appApi.remove_all_events(watcher)
 
 
-def watcher_info():
+def watcher_graph():
     watcher = appApi.get_watcher_by_name(select_watcher())
     if watcher != -1:
         watcher_info = appApi.get_watcher_info(watcher)
-        events = list(filter(
+        statements = list(filter(
             lambda item: item[COL_TYPE] == STATEMENT_EVENT_TYPE, watcher_info["events"]))
         distributions = list(filter(
             lambda item: item[COL_TYPE] == DISTRIBUTION_EVENT_TYPE, watcher_info["events"]))
         currency = currency_to_symbol_or_type(watcher[COL_CURRENCY])
-        plots_data = [{"data": events,
+        plots_data = [{"data": statements,
                        "title": STATEMENT_EVENT_TYPE,
                        "currency": currency}]
         if len(distributions) > 0:
@@ -252,6 +261,42 @@ def watcher_info():
             Plot().show_plot(plots_data[0]["data"],
                              plot_title=STATEMENT_EVENT_TYPE,
                              currency=currency, window_title=watcher[COL_NAME])
+
+
+def watcher_info():
+    watcher = appApi.get_watcher_by_name(select_watcher())
+    if watcher != -1:
+        events = appApi.get_watcher_events(watcher, STATEMENT_EVENT_TYPE)
+        # print(json.dumps(events, indent=2, cls=DecimalEncoder))
+        events = appApi.get_watcher_events(
+            watcher, event_type=STATEMENT_EVENT_TYPE, fill_dates=True)
+
+        start_year = datetime.strptime(events[0][COL_DATE], DATE_FORMAT).year
+        row = {"Year": start_year}
+        rows = [row]
+        for event in events:
+            event_date = datetime.strptime(
+                event[COL_DATE], DATE_FORMAT)
+            if event_date.year != start_year:
+                row = {"Year": event_date.year}
+                start_year = event_date.year
+                rows.append(row)
+            row[date_to_month_str(event_date)] = event[COL_VALUE]
+
+        # calculate ROI
+        for row in rows:
+            year = row["Year"]
+            events_year = []
+            for event in events:
+                event_year = datetime.strptime(
+                    event[COL_DATE], DATE_FORMAT).year
+                if event_year == year:
+                    events_year.append(event)
+            info = calculate_investment_info(events_year)
+            row["ROI"] = info[YTDP]
+
+        # print(json.dumps(events, indent=2, cls=DecimalEncoder))
+        Plot().show_table(rows, headers=["Year"]+get_months_list()+["ROI"])
 
 
 def toggle_debug():
@@ -405,13 +450,13 @@ def ai_menu():
 
 
 def back_to_main_menu():
+    print("!!!!!!! HERE !!!!!!")
     raise (Exception(BACK_TO_MAIN_MENU))
 
 
 def show_sub_menu(menu_entries, add_back=True):
-    back_str = "<-- back"
-    if add_back and len(list(filter(lambda i: i[0] != back_str, menu_entries))) > 0:
-        menu_entries.append([back_str, back_to_main_menu])
+    if add_back and BACK_TO_MAIN_MENU not in menu_entries:
+        menu_entries.append([BACK_TO_MAIN_MENU, back_to_main_menu])
     menu = TerminalMenu(
         [f"[{index}] {item[0]}" for index, item in enumerate(menu_entries)])
     choice = menu.show()
@@ -422,6 +467,7 @@ def show_watcher_summary():
     watchers = appApi.get_watchers()
     if len(watchers) > 0:
         print("Watchers summary")
+        print_debug("Watchers summary", CURRENCY_TYPES, watchers)
         rows = []
         for currency in CURRENCY_TYPES:
             currency_sum = 0
@@ -448,7 +494,7 @@ def show_watcher_summary():
                    COL_UNFUNDED: invested-commited}
 
             rows.append(row)
-        print_debug(json.dumps(rows, indent=2, cls=DecimalEncoder))
+        print_debug("rows", json.dumps(rows, indent=2, cls=DecimalEncoder))
         Plot().show_table(rows, sort_headers=False)
 
 
@@ -478,6 +524,7 @@ def show_watchers():
             w[MONTHS] = watcher_info[COL_FINANCE][MONTHS]
     headers = [COL_NAME, COL_VALUE,
                COL_INVESTED, COL_DIST_ITD, ROI, MONTHS]
+    print_debug("headsers", headers)
     Plot().show_table(watchers, headers=headers)
     headers = [COL_NAME, COL_PROFIT_ITD, COL_PROFIT_YTD,
                COL_DIST_YTD, COL_UNFUNDED, XIRR]
@@ -488,6 +535,7 @@ def watchers_menu():
     show_sub_menu([
         ["Show Watchers", show_watchers],
         ["Add Watcher", add_watcher_menu],
+        ["Show Watcher Graph", watcher_graph],
         ["Show Watcher Info", watcher_info],
         ["Update Watcher", update_watcher_menu],
         ["Remove Watcher", remove_watcher_menu]
@@ -544,6 +592,20 @@ def show_advisors():
     Plot().show_table(advisors, headers=[COL_ID, COL_MAIL, COL_PHONE])
 
 
+def show_events(watcher):
+    watcher_events = appApi.get_watcher_events(watcher)
+    if len(watcher_events) > 0:
+        print_debug(f"show_events {watcher_events}")
+        for event_type in EVENT_TYPES:
+            events = list(
+                filter(lambda event: event[COL_TYPE] == event_type, watcher_events))
+            if len(events) > 0:
+                Plot().show_table(
+                    events, value_postfix=watcher[COL_CURRENCY] if COL_CURRENCY in watcher else "")
+    else:
+        print("No events found for this watcher")
+
+
 def settings_menu():
     debug_menu = "Disable Debug" if get_debug_mode() else "Enable Debug"
     show_sub_menu([[debug_menu, toggle_debug],
@@ -576,5 +638,9 @@ if __name__ == "__main__":
         try:
             main_menu()
         except Exception as e:
+            print("HERE", e)
             if str(e) != BACK_TO_MAIN_MENU:
                 raise (e)
+                exc_type, exc_obj, exc_tb = sys.exc_info()
+                fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                print(f"exception:{e},in file:{fname}/{exc_tb.tb_lineno}")

@@ -5,12 +5,13 @@ from datetime import datetime
 
 
 def currency_to_symbol_or_type(currency):
+    # print("currency_to_symbol_or_type1", currency)
+    # print("currency_to_symbol_or_type2", CURRENCY_SYMBOLS)
+    # print("currency_to_symbol_or_type3", CURRENCY_TYPES)
     if currency in CURRENCY_SYMBOLS:
         return CURRENCY_TYPES[CURRENCY_SYMBOLS.index(currency)]
     if currency in CURRENCY_TYPES:
         return CURRENCY_SYMBOLS[CURRENCY_TYPES.index(currency)]
-    if currency in CURRENCY_TYPES:
-        return currency
 
     return None
 
@@ -34,3 +35,13 @@ class DecimalEncoder(json.JSONEncoder):
         if isinstance(o, decimal.Decimal):
             return str(o)
         return super().default(o)
+
+
+def get_months_list(year=None):
+    if year is None:  # return just the month
+        return [datetime(2023, i, 1).strftime("%b") for i in range(1, 13)]
+    return [datetime(year, i, 1).strftime(DATE_FORMAT) for i in range(1, 13)]
+
+
+def date_to_month_str(date):
+    return date.strftime("%b")

@@ -1,7 +1,6 @@
 from db.local_db import LocalDb
 
 
-from db.remote_db import RemoteDb
 from helpers.defs import *
 from .watcher_api import WatcherApi
 from .event_api import EventApi
@@ -10,7 +9,7 @@ from .event_api import EventApi
 class AppApi:
     def __init__(self, local_db=False, test_mode=False) -> None:
         table_names = TEST_TABLE_NAMES if test_mode else PROD_TABLE_NAMES
-        self.db = LocalDb(table_names) if local_db else RemoteDb()
+        self.db = LocalDb(table_names, local_storage=local_db)
         table_name = EVENTS_TABLE_NAME_TEST if test_mode else EVENTS_TABLE_NAME
         self.event_api = EventApi(self.db, table_name)
         table_name = WATCHERS_TABLE_NAME_TEST if test_mode else WATCHERS_TABLE_NAME

@@ -4,28 +4,37 @@ from helpers.debug import print_debug
 
 
 class LocalDb:
-    def __init__(self, tables_names) -> None:
+    def __init__(self,  tables_names, local_storage=False) -> None:
         print_debug("starting LocalDb for table", tables_names)
         self.db_type = 'dynamodb'
         self.endpoint_url = 'http://localhost:8000'
-        self.db = boto3.resource(self.db_type, endpoint_url=self.endpoint_url)
+        if local_storage:
+            self.db = boto3.resource(
+                self.db_type, endpoint_url=self.endpoint_url)
+        else:
+            self.db = boto3.resource(self.db_type)
+        self.local_storage = local_storage
         for t in tables_names:
             self.create_table(t)
 
     def tables_names(self):
-        client = boto3.client(self.db_type, endpoint_url=self.endpoint_url)
+        if self.local_storage:
+            client = boto3.client(self.db_type, endpoint_url=self.endpoint_url)
+        else:
+            client = boto3.client(self.db_type)
         response = client.list_tables()
         return response["TableNames"]
 
     def get_table(self, table_name):
         table = self.db.Table(table_name)
         response = table.scan()
-        # print_debug(f"get_table read response {response}")
+        print_debug(f"get_table read response {response}")
         data = response['Items']
         while 'LastEvaluatedKey' in response:
             response = table.scan(
                 ExclusiveStartKey=response['LastEvaluatedKey'])
             data.extend(response['Items'])
+        print_debug(f"get_table data {data}")
         return data
 
     def get_row(self, table_name, row_id):
