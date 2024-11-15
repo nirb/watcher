@@ -14,8 +14,10 @@ class LocalDb:
         else:
             self.db = boto3.resource(self.db_type)
         self.local_storage = local_storage
+        remote_tables = self.tables_names()
         for t in tables_names:
-            self.create_table(t)
+            if t not in remote_tables:
+                self.create_table(t)
 
     def tables_names(self):
         if self.local_storage:
@@ -72,23 +74,22 @@ class LocalDb:
             return -1
 
     def create_table(self, table_name):
-        if table_name not in self.tables_names():
-            table = self.db.create_table(
-                TableName=table_name,
-                KeySchema=[
-                    {
-                        'AttributeName': 'id',
-                        'KeyType': 'HASH'
-                    }
-                ],
-                AttributeDefinitions=[
-                    {
-                        'AttributeName': 'id',
-                        'AttributeType': 'S'
-                    }
-                ],
-                ProvisionedThroughput={
-                    'ReadCapacityUnits': 5,
-                    'WriteCapacityUnits': 5
+        self.db.create_table(
+            TableName=table_name,
+            KeySchema=[
+                {
+                    'AttributeName': 'id',
+                    'KeyType': 'HASH'
                 }
-            )
+            ],
+            AttributeDefinitions=[
+                {
+                    'AttributeName': 'id',
+                    'AttributeType': 'S'
+                }
+            ],
+            ProvisionedThroughput={
+                'ReadCapacityUnits': 5,
+                'WriteCapacityUnits': 5
+            }
+        )
