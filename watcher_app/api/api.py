@@ -46,8 +46,8 @@ class AppApi:
     def add_event(self, watcher, date, type, value, description):
         return self.event_api.add_event(watcher, date, type, value, description)
 
-    def update_event(self, parent_id, event_id, date, type, value, description):
-        return self.event_api.update_event(parent_id, event_id, date, type,
+    def update_event(self, parent_id, event_id, date, event_type, value, description):
+        return self.event_api.update_event(parent_id, event_id, date, event_type,
                                            value, description)
 
     def remove_event(self, event_id):

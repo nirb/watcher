@@ -38,7 +38,10 @@ class WatcherApi:
         reversed_list = list(reversed(events))
         last_event = None
         for event in reversed_list:
-            if len(ret_list) == 0:  # the first event
+            if event[COL_TYPE] != STATEMENT_EVENT_TYPE:
+                ret_list.append(event)
+                continue
+            elif last_event is None:
                 ret_list.append(event)
                 last_event = event.copy()
                 continue
@@ -126,26 +129,20 @@ class WatcherApi:
             },
             "UpdateExpression": f"SET \
                 #{COL_NAME} = :{COL_NAME} ,\
-              #{COL_CURRENCY} = :{COL_CURRENCY},\
-              #{COL_TYPE} = :{COL_TYPE},\
-              #{COL_ACTIVE} = :{COL_ACTIVE},\
-              #{COL_COMMITMENT} = :{COL_COMMITMENT},\
-              #{COL_UNFUNDED} = :{COL_UNFUNDED}",
+                #{COL_CURRENCY} = :{COL_CURRENCY},\
+                #{COL_TYPE} = :{COL_TYPE},\
+                #{COL_ACTIVE} = :{COL_ACTIVE}",
             "ExpressionAttributeNames": {
                 f"#{COL_NAME}": f"{COL_NAME}",
                 f"#{COL_CURRENCY}": f"{COL_CURRENCY}",
                 f"#{COL_TYPE}": f"{COL_TYPE}",
-                f"#{COL_ACTIVE}": f"{COL_ACTIVE}",
-                f"#{COL_COMMITMENT}": f"{COL_COMMITMENT}",
-                f"#{COL_UNFUNDED}": f"{COL_UNFUNDED}"
+                f"#{COL_ACTIVE}": f"{COL_ACTIVE}"
             },
             "ExpressionAttributeValues": {
                 f":{COL_NAME}": watcher[COL_NAME],
                 f":{COL_CURRENCY}": watcher[COL_CURRENCY],
                 f":{COL_TYPE}": watcher[COL_TYPE],
-                f":{COL_ACTIVE}": watcher[COL_ACTIVE],
-                f":{COL_COMMITMENT}": watcher[COL_COMMITMENT],
-                f":{COL_UNFUNDED}": watcher[COL_UNFUNDED],
+                f":{COL_ACTIVE}": watcher[COL_ACTIVE]
             }
         }
         return self.db.update_row(self.table_name, payload)

@@ -61,19 +61,9 @@ class EventApi:
             }
         }
         print_debug(f"update_event {payload=}")
-        if self.db.update_row(self.table_name, payload) == 0:
-            row_index = get_row_index_by_col(
-                COL_ID, event_id, self.get_events())
-            if row_index != -1:
-                self.events[row_index] = {
-                    "id": event_id,
-                    "parent_id": parent_id,
-                    "date": date,
-                    "type": type,
-                    "value": value,
-                    "description": description
-                }
-                return RET_OK
+        if self.db.update_row(self.table_name, payload) == RET_OK:
+            self.events = []
+            return RET_OK
         return RET_FAILED
 
     def remove_event(self, event_id):

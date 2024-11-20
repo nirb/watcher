@@ -34,6 +34,8 @@ class DecimalEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, decimal.Decimal):
             return str(o)
+        if isinstance(o, type(int)):
+            return int_to_str(o)
         return super().default(o)
 
 

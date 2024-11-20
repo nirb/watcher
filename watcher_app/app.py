@@ -1,3 +1,8 @@
+from random import randint
+from test.test import run_tests
+from ai.ai import analyze_doc
+from ui.plots import Plot
+from helpers.investment_calc import calculate_investment_profit, calculate_investment_info
 import sys
 import os
 import json
@@ -8,12 +13,8 @@ from dotenv import load_dotenv
 from api.api import AppApi
 from helpers.defs import *
 from helpers.debug import get_debug_mode, toggle_debug_mode, print_debug
-from helpers.helpers import currency_to_symbol_or_type, DecimalEncoder, get_months_list, date_to_month_str
-from helpers.investment_calc import calculate_investment_profit, calculate_investment_info
-from ui.plots import Plot
-from ai.ai import analyze_doc
-from test.test import run_tests
-from random import randint
+from helpers.helpers import currency_to_symbol_or_type, DecimalEncoder, get_months_list, \
+    date_to_month_str, int_to_str
 
 
 load_dotenv()
@@ -93,7 +94,7 @@ def add_event_menu():
             except:
                 print("Error in date formate")
 
-    description_default = f"{event_type} event."
+    description_default = f"{event_type}"
     description = input(
         f"Enter description / enter for '{description_default}':")
 
@@ -103,12 +104,20 @@ def add_event_menu():
     ret = appApi.add_event(
         watcher=watcher, date=date, type=event_type,
         value=value, description=description)
-    print("Add event succeddded." if ret == RET_OK else "Add event Failed!!!!")
+    print(f"Add {event_type} event succeddded." if ret ==
+          RET_OK else f"Add {event_type} event Failed!!!!")
+    if event_type == COMMITMENT_EVENT_TYPE:
+        if are_you_sure("Do you want to add initial statement with value 0"):
+            ret = appApi.add_event(
+                watcher=watcher, date=date, type=STATEMENT_EVENT_TYPE,
+                value=0, description="initial statement")
+            print(f"Add {STATEMENT_EVENT_TYPE} event succeddded." if ret ==
+                  RET_OK else f"Add {STATEMENT_EVENT_TYPE} event Failed!!!!")
 
 
 def select_event_menu():
     watcher = appApi.get_watcher_by_name(select_watcher())
-    appApi.show_events(watcher)
+    # appApi.show_events(watcher)
     watcher_info = appApi.get_watcher_info(watcher)
     if watcher_info:
         options = [str(event[COL_DATE]) + "-" + str(event[COL_VALUE]) + "-" + event[COL_DESCRIPTION]
@@ -128,27 +137,38 @@ def update_event_menu():
         return
     date = input(f"Enter date ({str(event[COL_DATE])}): ")
     if date == "":
-        date = datetime.now().strftime(DATE_FORMAT)
+        date = event[COL_DATE]
 
     value = 0
     if watcher[COL_TYPE] in INVESTMENT_WATCHER_TYPES:
-        type = select_event_type(INVESTMENT_EVENT_TYPES)
-        value = int(input("Enter value: "))
+        # type = select_event_type(INVESTMENT_EVENT_TYPES)
+        input_value = input(f"Enter value: ({event[COL_VALUE]}): ")
+        if input_value == "":
+            value = int(event[COL_VALUE])
+        else:
+            value = int(input_value)
     else:
-        type = select_event_type(OTHER_EVENT_TYPES)
-    description = input("Enter description: ")
+        # type = select_event_type(OTHER_EVENT_TYPES)
+        pass
+    event_type = event[COL_TYPE]
+    description = input(f"Enter description: ({event[COL_DESCRIPTION]}): ")
+    if description == "":
+        description = event[COL_DESCRIPTION]
     appApi.update_event(parent_id=watcher[COL_ID], event_id=event[COL_ID],
-                        date=date, type=type,
+                        date=date, event_type=event_type,
                         value=value, description=description)
 
 
 def update_watcher_menu():
     watcher = appApi.get_watcher_by_name(select_watcher())
+    watcher_name = input(f"Watcher name ({watcher[COL_NAME]}): ")
+    if watcher_name != "":
+        watcher[COL_NAME] = watcher_name
+
     watcher[COL_CURRENCY] = select_currency(
         current_selection=watcher[COL_CURRENCY])
     watcher[COL_TYPE] = select_watcher_type(
         current_selection=watcher[COL_TYPE])
-    # watcher = add_watcher_investment_cols(watcher)
     watcher[COL_ACTIVE] = select_from_list("Active?", ["YES", "NO"])
     appApi.update_watcher(watcher)
 
@@ -258,45 +278,69 @@ def watcher_graph():
                  "currency": currency})
             Plot().show_plots(plots_data, window_title=watcher[COL_NAME])
         else:
-            Plot().show_plot(plots_data[0]["data"],
+            Plot().show_plot(list(reversed(plots_data[0]["data"])),
                              plot_title=STATEMENT_EVENT_TYPE,
                              currency=currency, window_title=watcher[COL_NAME])
 
 
-def watcher_info():
-    watcher = appApi.get_watcher_by_name(select_watcher())
-    if watcher != -1:
-        events = appApi.get_watcher_events(watcher, STATEMENT_EVENT_TYPE)
-        # print(json.dumps(events, indent=2, cls=DecimalEncoder))
-        events = appApi.get_watcher_events(
-            watcher, event_type=STATEMENT_EVENT_TYPE, fill_dates=True)
+def show_watcher_info(watcher=None, watcher_name=None, selected_year=None):
+    if watcher is None and watcher_name is not None:
+        watcher = appApi.get_watcher_by_name(watcher_name)
 
-        start_year = datetime.strptime(events[0][COL_DATE], DATE_FORMAT).year
-        row = {"Year": start_year}
-        rows = [row]
-        for event in events:
+    events = appApi.get_watcher_events(watcher, fill_dates=True)
+    if selected_year != None:
+        events = list(filter(lambda e: datetime.strptime(
+            e[COL_DATE], DATE_FORMAT).year == selected_year, events))
+
+    start_year = datetime.strptime(events[0][COL_DATE], DATE_FORMAT).year
+    row = {"Year": start_year}
+    rows = [row]
+    values_in_k = False
+    for event in events:
+        if event[COL_TYPE] == STATEMENT_EVENT_TYPE:
             event_date = datetime.strptime(
                 event[COL_DATE], DATE_FORMAT)
             if event_date.year != start_year:
                 row = {"Year": event_date.year}
                 start_year = event_date.year
                 rows.append(row)
-            row[date_to_month_str(event_date)] = event[COL_VALUE]
+            value = event[COL_VALUE]
+            if value > 1000000:
+                values_in_k = True
+                value /= 1000
+            row[date_to_month_str(event_date)] = int_to_str(value)
 
-        # calculate ROI
-        for row in rows:
-            year = row["Year"]
-            events_year = []
-            for event in events:
-                event_year = datetime.strptime(
-                    event[COL_DATE], DATE_FORMAT).year
-                if event_year == year:
-                    events_year.append(event)
-            info = calculate_investment_info(events_year)
-            row["ROI"] = info[YTDP]
+    # calculate ROI
+    for row in rows:
+        year = row["Year"]
+        events_year = []
+        for event in events:
+            event_year = datetime.strptime(
+                event[COL_DATE], DATE_FORMAT).year
+            if event_year == year:
+                events_year.append(event)
+        info = calculate_investment_info(events_year)
+        row["ROI"] = info[YTDP]
+        row["YTD"] = info[COL_PROFIT_YTD]
 
-        # print(json.dumps(events, indent=2, cls=DecimalEncoder))
-        Plot().show_table(rows, headers=["Year"]+get_months_list()+["ROI"])
+    if get_debug_mode():
+        for e in events:
+            print(e[COL_DATE], e[COL_VALUE], e[COL_TYPE])
+
+    info = calculate_investment_info(events)
+    if get_debug_mode():
+        print(json.dumps(info, indent=2, cls=DecimalEncoder))
+    more_info = f"ITD:{info[ITDP]} IRR:{info[IRR]} XIRR:{info[XIRR]}"
+    print(
+        f'{more_info}, Values are in {"K-" if values_in_k else ""}{watcher[COL_CURRENCY]}')
+    Plot().show_table(rows, headers=[
+        "Year"]+get_months_list()+["ROI", "YTD"])
+
+
+def watcher_info():
+    watcher = appApi.get_watcher_by_name(select_watcher())
+    if watcher != -1:
+        show_watcher_info(watcher=watcher)
 
 
 def toggle_debug():
@@ -304,7 +348,8 @@ def toggle_debug():
 
 
 def date_str_to_datetime(date_str):
-    supported_formats = ["%d/%m/%Y", "%B %d, %Y", DATE_FORMAT]
+    supported_formats = [DATE_FORMAT, "%d/%m/%Y", "%d/%m/%y",
+                         "%B %d, %Y",  "%u %B %Y"]
 
     for formate in supported_formats:
         try:
@@ -313,6 +358,7 @@ def date_str_to_datetime(date_str):
         except Exception as e:
             continue
     print(f"Failed to format {date_str} to datetime, please improve the code")
+    print(f"date_str_to_datetime in {__file__}")
     exit(0)
 
 
@@ -346,12 +392,13 @@ def get_event_type_from_doc(doc_type):
     options = [("statement", STATEMENT_EVENT_TYPE),
                ("distribution", DISTRIBUTION_EVENT_TYPE),
                ("wire", WIRE_RECEIPT_EVENT_TYPE),
+               ("capital call", WIRE_RECEIPT_EVENT_TYPE),
                ("commitment", COMMITMENT_EVENT_TYPE)]
 
     print("get_event_type_from_doc", doc_type, options)
 
     for option in options:
-        if option[0] in doc_type:
+        if option[0] in doc_type.lower():
             return option[1]
     print("can't find event type from doc_type", doc_type)
     exit(0)
@@ -359,7 +406,7 @@ def get_event_type_from_doc(doc_type):
 
 def ai_menu():
     # watcher_name = select_watcher()
-    folder = input(f"Enter docs folder (enter {INVESTMENTS_DOC_DIR}): ")
+    folder = ""  # input(f"Enter docs folder (enter {INVESTMENTS_DOC_DIR}): ")
     if folder == "":
         folder = INVESTMENTS_DOC_DIR
 
@@ -370,18 +417,22 @@ def ai_menu():
         return
 
     # print(files_in_directory)
-    docs_types = "(statement or distribution or wire or commitment)"
+    docs_types = "(statement or distribution or wire or capital call or commitment)"
     selected_doc = select_from_list("Select a doc", sorted(files_in_directory))
     distribution_ai = "return a json with the following keys \
                   (fund_name, title, current_value (the distribution, without commas), report_date,\
-                      doc_type, currency)"
+                      doc_type, currency, period_date)"
     statement_ai = "return a json with the following keys \
                   (fund_name, title, current_value (without commas), report_date,\
-                      doc_type, initial_investment, currency)"
+                    period_date, doc_type, initial_investment, currency)"
+    wire_ai = "return a json with the following keys \
+                  (fund_name, title, current_value (without commas and without dot), report_date,\
+                     doc_type, currency)"
     general_ai_info = f"in most cases 'fund_name' is in the first row of the title, 'doc_type' can be on of {docs_types} and in most cases is in the title"
+    general_ai_info += ", return a valid json (without comments)"
     ai_text = f"if it is a 'statement' {statement_ai},\
         if it is a 'distribution' {distribution_ai}, \
-            {general_ai_info}"
+        if it is a 'wire' or 'capital call' {wire_ai}, {general_ai_info}"
     file_to_analyze = os.path.join(folder, selected_doc)
     result = analyze_doc(ai_text, file_to_analyze)
     json_index_start = result.find("```json") + len("```json")
@@ -417,15 +468,18 @@ def ai_menu():
         else:
             return
 
-    date = date_str_to_datetime(ai_json["report_date"])
-    type = get_event_type_from_doc(ai_json["doc_type"].lower())
+    event_type = get_event_type_from_doc(ai_json["doc_type"])
+    if event_type == STATEMENT_EVENT_TYPE:
+        date = date_str_to_datetime(ai_json["period_date"])
+    else:
+        date = date_str_to_datetime(ai_json["report_date"])
 
     value = int(ai_json["current_value"])
 
     print(
         f"\nAI found event for '{watcher[COL_NAME]}' with the following paramets:")
     print(f"Date:        {date}")
-    print(f"Type:        {type}")
+    print(f"Type:        {event_type}")
     print(f"Value:       {value:,} {ai_json['currency']}")
 
     if select_from_list("Do you want to add this event?", ["YES", "NO"]) == "NO":
@@ -433,12 +487,12 @@ def ai_menu():
         return
 
     description = input(
-        "Enter description (enter for 'Automatic added by ai'): ")
+        "Enter description (enter for 'Auto added by ai'): ")
     if description == "":
-        description = "Automatic added by ai"
+        description = "Auto added by ai"
     print(f"Description: {description}\n\n")
 
-    if appApi.add_event(watcher=watcher, date=date, type=type,
+    if appApi.add_event(watcher=watcher, date=date, type=event_type,
                         value=value, description=description) == RET_OK:
         move_to_dir = os.path.join(folder, "analyezed")
         if not os.path.isdir(move_to_dir):
@@ -450,7 +504,6 @@ def ai_menu():
 
 
 def back_to_main_menu():
-    print("!!!!!!! HERE !!!!!!")
     raise (Exception(BACK_TO_MAIN_MENU))
 
 
@@ -477,13 +530,17 @@ def show_watcher_summary():
             for w in watchers:
                 if w[COL_CURRENCY] == currency:
                     watcher_info = appApi.get_watcher_info(w)
-                    print_debug(
-                        f"get_watcher_info {json.dumps(watcher_info,indent=4,cls=DecimalEncoder)}")
                     if watcher_info is not None:
+                        print_debug(
+                            f"get_watcher_info {json.dumps(watcher_info, indent=4,cls=DecimalEncoder)}")
                         currency_sum += watcher_info[COL_FINANCE][COL_VALUE]
                         invested += watcher_info[COL_FINANCE][COL_INVESTED]
+                        print(
+                            f"watcher {w[COL_NAME]} ITD {watcher_info[COL_FINANCE][COL_PROFIT_YTD]}")
                         ytd += watcher_info[COL_FINANCE][COL_PROFIT_YTD]
                         commited += watcher_info[COL_FINANCE][COL_COMMITMENT]
+                    else:
+                        print("Error watcher_info not created")
 
             row = {COL_CURRENCY: currency,
                    COL_VALUE: currency_sum,
@@ -495,7 +552,8 @@ def show_watcher_summary():
 
             rows.append(row)
         print_debug("rows", json.dumps(rows, indent=2, cls=DecimalEncoder))
-        Plot().show_table(rows, sort_headers=False)
+        Plot().show_table(rows, headers=[
+            COL_VALUE, COL_INVESTED, COL_UNFUNDED, COL_PROFIT_ITD, COL_PROFIT_YTD])
 
 
 def show_watchers():
@@ -634,11 +692,24 @@ if __name__ == "__main__":
     if len(sys.argv) == 2 and sys.argv[1] == "test":
         del sys.argv[1]  # TODO read about test arguments
         run_tests()
+
+    if len(sys.argv) >= 3 and sys.argv[1] == "watcher_info":
+        if len(sys.argv) == 3:
+            show_watcher_info(
+                watcher=None, watcher_name=sys.argv[2], selected_year=None)
+        else:
+            show_watcher_info(
+                watcher=None, watcher_name=sys.argv[2], selected_year=int(sys.argv[3]))
+        exit(0)
+
+    # watcher_info("Hazavim Bond, L.P")
+    # exit(0)
+
     while True:
         try:
             main_menu()
         except Exception as e:
-            print("HERE", e)
+            print(e)
             if str(e) != BACK_TO_MAIN_MENU:
                 raise (e)
                 exc_type, exc_obj, exc_tb = sys.exc_info()

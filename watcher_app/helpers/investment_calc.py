@@ -1,6 +1,7 @@
 import numpy as np
 from helpers.defs import *
 from helpers.helpers import DecimalEncoder, get_months_list, date_to_month_str
+from helpers.debug import print_debug
 from datetime import datetime
 from scipy.optimize import newton
 import numpy_financial as npf
@@ -36,7 +37,7 @@ def calculate_investment_info(events):
     """
 
     # Sorting events based on date, assuming date is in DATE_FORMAT
-    events.sort(key=lambda x: datetime.strptime(x[COL_DATE], DATE_FORMAT))
+    # events.sort(key=lambda x: datetime.strptime(x[COL_DATE], DATE_FORMAT))
     # print(json.dumps(events, indent=4, cls=DecimalEncoder))
     total_invested = 0
     total_distributed = 0
@@ -46,15 +47,14 @@ def calculate_investment_info(events):
     cash_flow_dates = []  # Corresponding dates for each cash flow
 
     # Get the current year for YTD calculations
-    now = datetime.now()
-    current_year = now.year
+    last_event_date = datetime.strptime(events[0][COL_DATE], DATE_FORMAT)
+
     ytd_invested = 0
     ytd_distributed = 0
 
     ytd_start_value = 0
     ytd_end_value = 0
     total_commitment = 0
-
     for event in events:
         event_date = datetime.strptime(event[COL_DATE], DATE_FORMAT)
         event_year = event_date.year
@@ -62,25 +62,26 @@ def calculate_investment_info(events):
         value = int(event[COL_VALUE])
 
         if event_type == STATEMENT_EVENT_TYPE:
-            current_value = value
-            if event_year == current_year-1:
+            if current_value == 0:
+                current_value = value
+            # TODO think about this
+            # if event_year == current_year-1:
+            #    ytd_start_value = value
+            if event_year == last_event_date.year:
                 ytd_start_value = value
-            if event_year == current_year and ytd_start_value == 0:
-                ytd_start_value = value
-            if event_year == current_year:
+            if event_year == last_event_date.year and ytd_end_value == 0:
                 ytd_end_value = value
         elif event_type == WIRE_RECEIPT_EVENT_TYPE:
             total_invested += value
             cash_flows.append(-value)  # Investment is a negative cash flow
             cash_flow_dates.append(event_date)
-            if event_date.year == current_year:
+            if event_year == last_event_date.year:
                 ytd_invested += value
         elif event_type == DISTRIBUTION_EVENT_TYPE:
             total_distributed += value
             cash_flows.append(value)  # Distribution is a positive cash flow
             cash_flow_dates.append(event_date)
-
-            if event_date.year == current_year:
+            if event_year == last_event_date.year:
                 ytd_distributed += value
         elif event_type == COMMITMENT_EVENT_TYPE:
             total_commitment += value
@@ -88,7 +89,7 @@ def calculate_investment_info(events):
     # Add the current value of the investment as the final cash flow (assuming the latest date)
     if current_value:
         cash_flows.append(current_value)
-        cash_flow_dates.append(now)
+        cash_flow_dates.append(last_event_date)
 
     # Calculate Net Gain or Loss
     net_gain_or_loss = current_value + total_distributed - total_invested
@@ -98,13 +99,17 @@ def calculate_investment_info(events):
         100 if total_invested > 0 else 0
 
     # Calculate YTD Net Gain or Loss
-    ytd_net_gain_or_loss = ytd_end_value - \
-        ytd_start_value + ytd_distributed - ytd_invested
+    print_debug(
+        f"{ytd_end_value=} {ytd_start_value=} {ytd_distributed=} {ytd_invested=}")
+    ytd_net_gain_or_loss = ytd_end_value - ytd_invested + \
+        ytd_distributed - ytd_start_value
 
     # Calculate YTD as a percentage
-    ytd_start = ytd_start_value + ytd_distributed - ytd_invested
+    ytd_start = ytd_start_value + ytd_distributed + ytd_invested
+    print_debug(f"{ytd_start=} {ytd_net_gain_or_loss=}")
     ytd_percentage = 0 if ytd_start == 0 else 100 * \
         (ytd_net_gain_or_loss / ytd_start)
+    print_debug(f"{ytd_percentage=}")
 
     # Calculate ITD (Inception-to-Date) Net Gain or Loss
     itd_net_gain_or_loss = net_gain_or_loss
