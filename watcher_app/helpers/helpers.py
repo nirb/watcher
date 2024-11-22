@@ -16,10 +16,13 @@ def currency_to_symbol_or_type(currency):
     return None
 
 
-def int_to_str(value):
+def int_to_str(value, currency=None):
+    show_currency = ""
+    if currency:
+        show_currency = currency_to_symbol_or_type(currency)
     if value >= 0:
-        return f"{int(value):,}"
-    return f"({int(-1*value):,})"
+        return f"{show_currency}{int(value):,}"
+    return f"({show_currency}{int(-1*value):,})"
 
 
 def generate_id():

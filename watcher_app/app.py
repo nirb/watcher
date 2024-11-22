@@ -2,14 +2,14 @@ from random import randint
 from test.test import run_tests
 from ai.ai import analyze_doc
 from ui.plots import Plot
-from helpers.investment_calc import calculate_investment_profit, calculate_investment_info
+from helpers.investment_calc import calculate_investment_info
 import sys
 import os
 import json
 from simple_term_menu import TerminalMenu
 from datetime import datetime
 from dotenv import load_dotenv
-
+from api.view_api import get_watchers_summary_currency, get_watchers_summary_date
 from api.api import AppApi
 from helpers.defs import *
 from helpers.debug import get_debug_mode, toggle_debug_mode, print_debug
@@ -117,10 +117,10 @@ def add_event_menu():
 
 def select_event_menu():
     watcher = appApi.get_watcher_by_name(select_watcher())
-    # appApi.show_events(watcher)
     watcher_info = appApi.get_watcher_info(watcher)
+
     if watcher_info:
-        options = [str(event[COL_DATE]) + "-" + str(event[COL_VALUE]) + "-" + event[COL_DESCRIPTION]
+        options = [str(event[COL_DATE]) + " - " + event[COL_TYPE] + " - " + int_to_str(event[COL_VALUE]) + " - " + event[COL_DESCRIPTION]
                    for event in watcher_info[COL_EVENTS]]
         selected = select_from_list("Select Event", options)
         if selected:
@@ -207,7 +207,7 @@ def add_watcher_menu(name=None):
         name = input("Watcher name: ")
     if len(name) < 3:
         print("Watcher name is too short")
-        return
+        return None
     type = select_watcher_type()
     watcher = {COL_TYPE: type, COL_NAME: name, COL_ACTIVE: "YES"}
     if type in INVESTMENT_WATCHER_TYPES:
@@ -220,8 +220,10 @@ def add_watcher_menu(name=None):
     advisor_name = select_from_list("Select Advisor",
                                     list(map(lambda item: item[COL_ID], advisors)))
     watcher[ADVISOR_NAME] = advisor_name
-    if appApi.add_watcher(watcher):
+    if appApi.add_watcher(watcher) == RET_OK:
         print(f"New Watcher added {name}")
+        return watcher
+    return None
 
 
 def show_events_menu():
@@ -295,7 +297,7 @@ def show_watcher_info(watcher=None, watcher_name=None, selected_year=None):
     start_year = datetime.strptime(events[0][COL_DATE], DATE_FORMAT).year
     row = {"Year": start_year}
     rows = [row]
-    values_in_k = False
+    value_divider = 1
     for event in events:
         if event[COL_TYPE] == STATEMENT_EVENT_TYPE:
             event_date = datetime.strptime(
@@ -304,11 +306,15 @@ def show_watcher_info(watcher=None, watcher_name=None, selected_year=None):
                 row = {"Year": event_date.year}
                 start_year = event_date.year
                 rows.append(row)
-            value = event[COL_VALUE]
-            if value > 1000000:
-                values_in_k = True
-                value /= 1000
-            row[date_to_month_str(event_date)] = int_to_str(value)
+            row[date_to_month_str(event_date)] = event[COL_VALUE]
+            if event[COL_VALUE] > 1000000:
+                value_divider = 1000
+
+    # handle values, change to str and divide by 1000 if > 1M
+    for row in rows:
+        for key in row.keys():
+            if key != "Year":
+                row[key] = int_to_str(row[key]/value_divider)
 
     # calculate ROI
     for row in rows:
@@ -330,9 +336,16 @@ def show_watcher_info(watcher=None, watcher_name=None, selected_year=None):
     info = calculate_investment_info(events)
     if get_debug_mode():
         print(json.dumps(info, indent=2, cls=DecimalEncoder))
-    more_info = f"ITD:{info[ITDP]} IRR:{info[IRR]} XIRR:{info[XIRR]}"
+    currency = watcher[COL_CURRENCY]
     print(
-        f'{more_info}, Values are in {"K-" if values_in_k else ""}{watcher[COL_CURRENCY]}')
+        f"\n\nAdvisor: {watcher[ADVISOR_NAME]}, ", end="")
+    print(
+        f"Value: {int_to_str(info[COL_VALUE],currency)} Invested: {int_to_str(info[COL_INVESTED],currency)} ", end="")
+    print(f"Committed: {int_to_str(info[COL_COMMITMENT],currency)}")
+    more_info = f"ITD:{info[ITDP]} IRR:{info[IRR]} XIRR:{info[XIRR]} "
+    more_info += f"Total Dist:{int_to_str(info[COL_DIST_ITD],currency)}"
+    print(
+        f'{more_info} Values are in {"K-" if value_divider==1000 else ""}{watcher[COL_CURRENCY]}')
     Plot().show_table(rows, headers=[
         "Year"]+get_months_list()+["ROI", "YTD"])
 
@@ -452,17 +465,23 @@ def ai_menu():
         return
 
     watcher = appApi.get_watcher_by_name(watcher_name)
-    if watcher == RET_FAILED:
+    if True or watcher == RET_FAILED:
+        CREATE_NEW = "Create new watcher"
+        USE_WATCHER = "Use exsiting"
+        ADD_TO = f"Add to: {watcher_name}"
         print(f"Watcher with name '{watcher_name}' not found.")
         selected = select_from_list(
             f"Do you want to create new watcher with the name '{watcher_name}'",
-            [YES, NO, "Use exsiting"])
-        if selected == YES:
-            add_watcher_menu(watcher_name)
-            watcher = appApi.get_watcher_by_name(watcher_name)
-            if watcher == RET_FAILED:
+            ["<-- Back", ADD_TO, USE_WATCHER, CREATE_NEW])
+        # add to exsiting watcher
+        if selected == ADD_TO and watcher != RET_FAILED:
+            pass
+        elif selected == ADD_TO or selected == CREATE_NEW:
+            watcher_name = watcher_name if selected == ADD_TO else None
+            watcher = add_watcher_menu(watcher_name)
+            if watcher is None:
                 return
-        elif selected == "Use exsiting":
+        elif selected == USE_WATCHER:
             watcher_name = select_watcher()
             watcher = appApi.get_watcher_by_name(watcher_name)
         else:
@@ -516,44 +535,19 @@ def show_sub_menu(menu_entries, add_back=True):
     menu_entries[choice][1]()
 
 
-def show_watcher_summary():
-    watchers = appApi.get_watchers()
+def show_watchers_summary_currency(watchers):
     if len(watchers) > 0:
         print("Watchers summary")
         print_debug("Watchers summary", CURRENCY_TYPES, watchers)
-        rows = []
-        for currency in CURRENCY_TYPES:
-            currency_sum = 0
-            invested = 0
-            ytd = 0
-            commited = 0
-            for w in watchers:
-                if w[COL_CURRENCY] == currency:
-                    watcher_info = appApi.get_watcher_info(w)
-                    if watcher_info is not None:
-                        print_debug(
-                            f"get_watcher_info {json.dumps(watcher_info, indent=4,cls=DecimalEncoder)}")
-                        currency_sum += watcher_info[COL_FINANCE][COL_VALUE]
-                        invested += watcher_info[COL_FINANCE][COL_INVESTED]
-                        print(
-                            f"watcher {w[COL_NAME]} ITD {watcher_info[COL_FINANCE][COL_PROFIT_YTD]}")
-                        ytd += watcher_info[COL_FINANCE][COL_PROFIT_YTD]
-                        commited += watcher_info[COL_FINANCE][COL_COMMITMENT]
-                    else:
-                        print("Error watcher_info not created")
-
-            row = {COL_CURRENCY: currency,
-                   COL_VALUE: currency_sum,
-                   COL_INVESTED: invested,
-                   COL_PROFIT_ITD: calculate_investment_profit(invested, currency_sum),
-                   COL_PROFIT_YTD: ytd,
-                   COL_COMMITMENT: commited,
-                   COL_UNFUNDED: invested-commited}
-
-            rows.append(row)
+        rows = get_watchers_summary_currency(watchers)
         print_debug("rows", json.dumps(rows, indent=2, cls=DecimalEncoder))
         Plot().show_table(rows, headers=[
             COL_VALUE, COL_INVESTED, COL_UNFUNDED, COL_PROFIT_ITD, COL_PROFIT_YTD])
+
+
+def show_watchers_summary_date(watchers):
+    print("Watchers by date")
+    rows = get_watchers_summary_date(watchers)
 
 
 def show_watchers():
@@ -563,8 +557,8 @@ def show_watchers():
         return
 
     print_debug(json.dumps(watchers, indent=4, cls=DecimalEncoder))
-
-    show_watcher_summary()
+    show_watchers_summary_currency(watchers)
+    show_watchers_summary_date(watchers)
     for w in watchers:
         watcher_info = appApi.get_watcher_info(w)
         if watcher_info:
@@ -593,6 +587,7 @@ def watchers_menu():
     show_sub_menu([
         ["Show Watchers", show_watchers],
         ["Add Watcher", add_watcher_menu],
+        # ["Show Watcher Graph", watcher_summary],
         ["Show Watcher Graph", watcher_graph],
         ["Show Watcher Info", watcher_info],
         ["Update Watcher", update_watcher_menu],
